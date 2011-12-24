@@ -1,6 +1,3 @@
-# Rever
-# Nightly monkey-coded 2.30 - 5.30
-# Time to sleep
 class Polisher
   
   def self.solve(expr)
