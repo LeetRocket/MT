@@ -44,8 +44,7 @@ class Polisher
       if tkn =~ @@num_rx
         
         unless last_was_op
-          puts "Syntax error: two numerics in a row"
-          System.exit(-1)
+          abort "Syntax error: two numerics in a row"
         end
         last_was_op = false
         
@@ -60,8 +59,7 @@ class Polisher
       else
         if @@ops[tkn] != @@ob && @@ops[tkn] != @@cb
           if last_was_op 
-            puts "Syntax error: two ops in a row"
-            System.exit(-2)
+            abort "Syntax error: two ops in a row"
           end
           last_was_op = true 
         end        
@@ -74,8 +72,7 @@ class Polisher
             post.push ops.pop
           end
           if ops.size == 0
-            puts "Syntax error: Opening bracket is missing"
-            System.exit(-3)
+            abort "Syntax error: Opening bracket is missing"
           end  
           ops.pop
         
@@ -93,7 +90,7 @@ class Polisher
     while ops.size != 0 do
       op = ops.pop
       if @@ops[op] == @@ob
-        puts "Syntax error: Closing bracket is missing"
+        abort "Syntax error: Closing bracket is missing"
       end
       post.push op
     end
@@ -110,6 +107,7 @@ class Polisher
       if tkn.kind_of? Numeric
         stack.push tkn
       else
+        abort( "Needed 2 nums found #{stack.size}") if stack.size < 2
         case tkn
           when '+'
             stack.push( stack.pop + stack.pop)
@@ -132,5 +130,7 @@ class Polisher
 
 end
 
-Polisher.solve(test_str = '2 + 2 * 2 * (18 - 9) ^ 65')
+puts "please enter the string"
+test_str = gets
+Polisher.solve(test_str)
 
