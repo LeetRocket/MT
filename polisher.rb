@@ -42,8 +42,13 @@ class Polisher
     inf_tokens.each do |tkn|
       puts "------\nCurrent token : #{tkn}" if @@dbg
       if tkn =~ @@num_rx
-        puts "WTF?????? TWO NUMERICS IN A ROW" unless last_was_op
+        
+        unless last_was_op
+          puts "Syntax error: two numerics in a row"
+          System.exit(-1)
+        end
         last_was_op = false
+        
         num = 0
         if tkn =~ /\./
           num = tkn.to_f
@@ -51,16 +56,29 @@ class Polisher
           num = tkn.to_i
         end
         post.push num
+      
       else
-        puts "WTF?????? TWO OPS IN A ROW" if last_was_op
-        last_was_op = true
+        if @@ops[tkn] != @@ob && @@ops[tkn] != @@cb
+          if last_was_op 
+            puts "Syntax error: two ops in a row"
+            System.exit(-2)
+          end
+          last_was_op = true 
+        end        
+        
         if ops.size == 0 || @@ops[tkn] == @@ob
           ops.push tkn
+        
         elsif @@ops[tkn] == @@cb
           while ops.size != 0 && @@ops[ops.last] != @@ob do
             post.push ops.pop
           end
+          if ops.size == 0
+            puts "Syntax error: Opening bracket is missing"
+            System.exit(-3)
+          end  
           ops.pop
+        
         else
           while ops.size != 0 && @@ops[ops.last] >= @@ops[tkn]  do
             post.push ops.pop
@@ -73,7 +91,11 @@ class Polisher
     end
     puts "-------\npopping the stack out" if @@dbg
     while ops.size != 0 do
-      post.push ops.pop
+      op = ops.pop
+      if @@ops[op] == @@ob
+        puts "Syntax error: Closing bracket is missing"
+      end
+      post.push op
     end
     puts "Output : #{post}" if @@dbg
     
