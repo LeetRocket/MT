@@ -35,6 +35,12 @@ module MT
       @ops[:OR]    = lambda { o_or }
       @ops[:NOT]   = lambda { o_not }
       
+      @ops[:EQ]    = lambda { eq }
+      @ops[:NE]    = lambda { ne }
+      @ops[:LT]    = lambda { lt }
+      @ops[:LE]    = lambda { le }
+      @ops[:GT]    = lambda { gt }
+      @ops[:GE]    = lambda { ge }
       
       @ops[:MOD]   = lambda { mod }
       @ops[:STOP]  = lambda { stop }
@@ -54,10 +60,10 @@ module MT
         0x06  =>  :DIV,  # 1 top = st0 / st1
         0x07  =>  :MOD,  # 1 top = st0 % st1       
         
-        0x08  =>  :AND,  # 1 top = st0 & st1
-        0x09  =>  :OR,   # 1 top = st0 | st1
-        0x0A  =>  :NOT,  # 1 top = ! st0
-        0x0B  =>  :XOR,  # 1 top = st0 ^ st1
+        0x08  =>  :NOP,  # 1 top = st0 & st1
+        0x09  =>  :NOP,   # 1 top = st0 | st1
+        0x0A  =>  :NOP,  # 1 top = ! st0
+        0x0B  =>  :NOP,  # 1 top = st0 ^ st1
         0x0C  =>  :NOP,
         0x0D  =>  :NOP,
         0x0E  =>  :NOP,
@@ -65,6 +71,16 @@ module MT
         
         0x10  => :POPV, 
         0x11  => :PSHV,
+        
+        0x20  => :EQ,
+        0x21  => :NE,
+        0x22  => :LT,
+        0x23  => :LE,
+        0x24  => :GT,
+        0x25  => :GE,
+        0x26  => :AND,
+        0x27  => :OR,
+        0x28  => :NOT,
         
         0xF0  => :PRT,  # 2 print nb
         0xF1  => :PRTT, # 1 print top
@@ -201,6 +217,31 @@ module MT
     def o_not()
       st0 = pop
       push st0 != 0 ? 0 : 1
+    end
+    
+    #comparison
+    def eq()
+      push pop == pop ? 1 : 0
+    end
+    
+    def ne()
+      push pop != pop ? 1 : 0
+    end
+    
+    def lt()
+      push pop > pop ? 1 : 0
+    end
+    
+    def le()
+      push pop >= pop ? 1 : 0
+    end
+    
+    def gt()
+      push pop < pop ? 1 : 0
+    end
+    
+    def ge()
+      push pop <= pop ? 1 : 0
     end
     
     def popv  #pops to specified addr

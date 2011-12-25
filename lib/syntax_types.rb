@@ -134,6 +134,7 @@ module MT
       out = []
       stk = []
       prev = nil
+      puts @tokens.to_s
       @tokens.each do |token|
         if token.kind_of? Numeric
           out.push token
@@ -188,7 +189,7 @@ module MT
           token.compile GLOBAL_SCOPE.get_var_addr(token.var_name)
           @bin += token.bin
           
-        #Compliling common operations
+        #Compliling operations
         elsif token == :t_plus
           @bin << c[:ADD]
         elsif token == :t_minus
@@ -205,6 +206,18 @@ module MT
           @bin << c[:OR]
         elsif token == :t_not
           @bin << c[:NOT]
+        elsif token == :t_eq
+          @bin << c[:EQ]
+        elsif token == :t_ne
+          @bin << c[:NE]
+        elsif token == :t_lt
+          @bin << c[:LT]
+        elsif token == :t_le
+          @bin << c[:LE]
+        elsif token == :t_gt
+          @bin << c[:GT]
+        elsif token == :t_ge
+          @bin << c[:GE]
           
         else
           abort ("Unexpected token #{token}")

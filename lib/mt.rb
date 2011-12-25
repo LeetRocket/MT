@@ -51,15 +51,15 @@ T_RX = {
   :t_mul    => /\*/,
   :t_div    => /\//,
   :t_mod    => /\%/,
-
-  :t_eq     => /==/,
-  :t_assign => /=/,
-  :t_ne     => /!=/,
-  :t_not    => /!/,
+  
   :t_ge     => />=/,
   :t_gt     => />/,
   :t_le     => /<=/,
-  :t_ls     => /</,
+  :t_lt     => /</,
+  :t_eq     => /==/,
+  :t_assign => /=/,
+  :t_ne     => /!=/,
+  :t_not    => /!/, 
   :t_and    => /&&/,
   :t_or     => /\|\|/
 }
@@ -193,7 +193,8 @@ def postfix(statement)
 end
 
 test_str = "
-    
+    var t1;
+    t1 = 1 < 2 && 3 <= 3;
 "
 
 tokens = tokenize test_str
