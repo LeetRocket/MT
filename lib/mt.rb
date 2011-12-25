@@ -193,9 +193,7 @@ def postfix(statement)
 end
 
 test_str = "
-    var i;
-    i = 0;
-    i = i + 1;
+    
 "
 
 tokens = tokenize test_str

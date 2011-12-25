@@ -199,6 +199,13 @@ module MT
           @bin << c[:DIV]
         elsif token == :t_mod
           @bin << c[:MOD]
+        elsif token == :t_and
+          @bin << c[:AND]
+        elsif token == :t_or
+          @bin << c[:OR]
+        elsif token == :t_not
+          @bin << c[:NOT]
+          
         else
           abort ("Unexpected token #{token}")
         end

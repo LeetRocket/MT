@@ -30,6 +30,12 @@ module MT
       @ops[:SUB]   = lambda { sub }
       @ops[:MUL]   = lambda { mul }
       @ops[:DIV]   = lambda { div }
+      
+      @ops[:AND]   = lambda { o_and }
+      @ops[:OR]    = lambda { o_or }
+      @ops[:NOT]   = lambda { o_not }
+      
+      
       @ops[:MOD]   = lambda { mod }
       @ops[:STOP]  = lambda { stop }
       @ops[:PRT]   = lambda { prt }
@@ -47,6 +53,7 @@ module MT
         0x05  =>  :MUL,  # 1 top = st0 * st1
         0x06  =>  :DIV,  # 1 top = st0 / st1
         0x07  =>  :MOD,  # 1 top = st0 % st1       
+        
         0x08  =>  :AND,  # 1 top = st0 & st1
         0x09  =>  :OR,   # 1 top = st0 | st1
         0x0A  =>  :NOT,  # 1 top = ! st0
@@ -168,6 +175,32 @@ module MT
   
     def mod()
       st0 = pop; push( pop % st0 )
+    end
+    
+    #logical
+    def o_and()
+      st0 = pop
+      st1 = pop
+      if st0 != 0 && st1 != 0
+        push 1
+      else
+        push 0
+      end
+    end
+    
+    def o_or()
+      st0 = pop
+      st1 = pop
+      if st0 != 0 || st1 != 0
+        push 1
+      else
+        push 0
+      end
+    end
+    
+    def o_not()
+      st0 = pop
+      push st0 != 0 ? 0 : 1
     end
     
     def popv  #pops to specified addr
