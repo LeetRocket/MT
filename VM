@@ -1,0 +1,34 @@
+VM
+Should be able to do the following:
+
+- Some unary operations
+- Some binary operations
+- Print some values
+- Declare variables
+- if else conditionals
+- loops
+- conditionals
+
+64 ops should be okay
+
+So, we should have:
+        A hash for variables
+        A stack for processing
+
+Unary operations involve:
+        INC
+        DEC 
+
+Binary operations involve:
+        ADD
+        SUB
+        MUL
+        DIV
+        
+Variables involve
+        DEFV id, value
+        PUSHV id
+        POPV id
+        
+        
+        	

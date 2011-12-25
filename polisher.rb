@@ -107,7 +107,7 @@ class Polisher
       if tkn.kind_of? Numeric
         stack.push tkn
       else
-        abort( "Needed 2 nums found #{stack.size}") if stack.size < 2
+        abort( "Exception: Needed 2 nums found #{stack.size}") if stack.size < 2
         case tkn
           when '+'
             stack.push( stack.pop + stack.pop)
