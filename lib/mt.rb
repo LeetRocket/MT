@@ -36,16 +36,14 @@ T_RX = {
   :t_obr    => /\(/,
   :t_cbr    => /\)/,
 
-  :t_begin  => /\{/,    #unsupported
-  :t_end    => /\}/,    #unsupported
+  :t_begin  => /\{/,    
+  :t_end    => /\}/,    
 
   :t_scol   => /;/,
   :t_col    => /,/,     #unsupported
 
-  :t_inc    => /\+\+/,  #unsupported
   :t_plus   => /\+/,
 
-  :t_dec    => /\-\-/,  #unsupprted
   :t_minus  => /\-/,
 
   :t_mul    => /\*/,
@@ -57,9 +55,9 @@ T_RX = {
   :t_le     => /<=/,
   :t_lt     => /</,
   :t_eq     => /==/,
-  :t_assign => /=/,
   :t_ne     => /!=/,
-  :t_not    => /!/, 
+  :t_not    => /!/,
+  :t_assign => /=/,
   :t_and    => /&&/,
   :t_or     => /\|\|/
 }
@@ -128,6 +126,17 @@ def tokenize(str)
             tokens.push token.to_i
             break
           else
+            # dirth to allow 'var i = 1;' ('var i =   =>  var i ; i =)
+            if (
+                 tokens.size >= 2 && 
+                 k == :t_assign &&
+                 tokens.last.kind_of?(String) && 
+                 tokens[tokens.size - 2] == :t_typedef
+               )
+              var_name = tokens.last
+              tokens.push :t_scol
+              tokens.push var_name
+            end
             tokens.push k
             break
         end
@@ -189,19 +198,21 @@ def group(tokens)
 end
 
 test_str = "
-    if( 1 < 2)
-    {
-      var j;
-      if( 1 < 2)
-      {
-        var j;
-      }
-      if( 2 < 3)
-      {
-        var j;
-      }   
-    }
+  //fibbonachi
+  var prev = 1;
+  var cur = 1;
+  var counter = 0;
+  while (counter < 10)
+  {
+    var tmp = cur;
+    cur = cur + prev;
+    prev = tmp;
+    counter = counter + 1;
+  }
 "
+
+
+puts test_str
 
 tokens = tokenize test_str
 statements = group(tokens)
@@ -213,6 +224,8 @@ b.compile
 
 vm = MT::TinyVM.new
 vm.to_asm(b.bin)
+puts '~~~~~~~~~~~~~'
+vm.dbg b.bin, (0..3).to_a
 
 
 

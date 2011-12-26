@@ -50,6 +50,9 @@ module MT
       @ops[:POPV]  = lambda { popv }
       @ops[:PSHV]  = lambda { pshv }
       
+      @ops[:JPR]   = lambda { jpr }
+      @ops[:JPRZ]  = lambda { jprz }
+      
       @opcodes = {
         0x00  =>  :NOP,
         0x01  =>  :PSH, # 2 push nb
@@ -60,10 +63,10 @@ module MT
         0x06  =>  :DIV,  # 1 top = st0 / st1
         0x07  =>  :MOD,  # 1 top = st0 % st1       
         
-        0x08  =>  :NOP,  # 1 top = st0 & st1
-        0x09  =>  :NOP,   # 1 top = st0 | st1
-        0x0A  =>  :NOP,  # 1 top = ! st0
-        0x0B  =>  :NOP,  # 1 top = st0 ^ st1
+        0x08  =>  :NOP,  
+        0x09  =>  :NOP,
+        0x0A  =>  :NOP,  
+        0x0B  =>  :NOP,  
         0x0C  =>  :NOP,
         0x0D  =>  :NOP,
         0x0E  =>  :NOP,
@@ -81,6 +84,9 @@ module MT
         0x26  => :AND,
         0x27  => :OR,
         0x28  => :NOT,
+        
+        0x30  => :JPR,   # 2 jump relative to offset
+        0x31  => :JPRZ,  # 2 jump relative if zero to offset
         
         0xF0  => :PRT,  # 2 print nb
         0xF1  => :PRTT, # 1 print top
@@ -133,7 +139,7 @@ module MT
     
     def get_op_size(op)
       case op
-        when :PSH, :POPV, :PSHV
+        when :PSH, :POPV, :PSHV, :JPRZ, :JPR
           2
         else 1
       end
@@ -245,24 +251,36 @@ module MT
     end
     
     def popv  #pops to specified addr
-      @MEM[next_byte] = pop
+      @MEM[next_val] = pop
     end
     
     def pshv #pushes variable into stack
-      push @MEM[next_byte]
+      push @MEM[next_val]
     end
   
-    #Stack
+    ### Stack ###
     def psh() #value
-      value = next_byte
+      value = next_val
       push value
     end
-  
-    #pop is mentioned below
-  
+    
+    ### Jumps ###
+    def jpr()
+      offset = next_val
+      @ptr += offset + (offset > 0 ? -1 : -2)
+    end
+    
+    def jprz()  # pop a value. jump relative to specified place if it == 0
+      if pop == 0
+        jpr
+      else
+        next_val
+      end
+    end
+    
     #Printing a character
     def prt #value
-      value = next_byte
+      value = next_val
       print value.chr.to_s
     end
     #prints top of stack
@@ -300,7 +318,7 @@ module MT
       @RF = val >= BASE
     end
   
-    def next_byte()
+    def next_val()
       @ptr += 1
       @byte_code[@ptr]
     end

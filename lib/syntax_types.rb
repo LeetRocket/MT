@@ -46,8 +46,11 @@ module MT
     def get_var_addr(var_name)
       abort("Variable #{var_name} is undefined") unless self.contains_var? var_name
       v = @vars[var_name]
-      return v if v
-      @parent.get_var_addr(var_name)
+      if v == nil
+        return @parent.get_var_addr(var_name)
+      end
+      puts "SCOPE_#{@id}::#{var_name} = #{@offset + v}"
+      @offset + v
     end
   
     def size()
@@ -69,14 +72,13 @@ module MT
   
   class LazyAddress
     
-    def initialize(scope, scope_addr)
+    def initialize(scope, var_name)
       @scope = scope
-      @scope_addr = scope_addr
+      @var_name = var_name
     end
     
     def real_addr
-      offset = @scope.offset  
-      offset + @scope_addr
+      @scope.get_var_addr(@var_name)
     end
   
   end
@@ -116,22 +118,27 @@ module MT
     end
     
     def compile()
-      prev = nil
       @synths.each do |st|
-         ctbl = MT::Computable.new st, @scope
+         ctbl = MT::Statement.new st, @scope
          if ctbl.init_var?
            @to_compile.push ctbl.to_init_var
-         elsif ctbl.if_statement?
-           @to_compile.push ctbl.to_if_statement
+         elsif ctbl.if?
+           @to_compile.push ctbl.to_if
+         elsif ctbl.else?
+           abort 'Unexpected else statement' unless @to_compile.last.kind_of? IfStatement
+           @to_compile.last.set_else_block ctbl.to_else
+         elsif ctbl.while?
+            @to_compile.push ctbl.to_while
          else
            @to_compile.push ctbl
          end
-         prev = st
       end
       @to_compile.each do |c|
+        puts "Compiling #{c.to_s}"
         c.compile
         @bin += c.bin
       end
+      @bin = [0] if @bin.empty?
       unless @scope.parent
         puts "COMPUTING SCOPE OFFSETS"
         Scope.compute_offsets
@@ -140,8 +147,9 @@ module MT
             @bin[i] = @bin[i].real_addr
           end
         end
+        @bin << 0xFF # STOP
       end
-      
+      @is_compiled = true
       @bin
     end
     
@@ -165,50 +173,85 @@ module MT
   class InitVar < VarContainer
     def compile()
       @scope.reg_var(@var_name)
-      puts "Registered var #{@var_name} #{@scope.id}\#(#{@scope.get_var_addr @var_name})"
+      puts "Registered var #{@var_name} #{@scope.id})"
       @is_compiled = true
     end  
   end
 
   class GetVar < VarContainer
-    def compile(var_addr)
+    def compile()
       c = get_codes
       @bin << c[:PSHV]
-      @bin << LazyAddress.new(@scope, var_addr)
+      @bin << LazyAddress.new(@scope, @var_name)
       @is_compiled = true
     end
   end
 
   class AssignVar < VarContainer
-    def compile(var_addr)
+    def compile()
       c = get_codes
       @bin << c[:POPV]
-      @bin << LazyAddress.new(@scope, var_addr)
+      @bin << LazyAddress.new(@scope, @var_name)
       @is_compiled = true
     end
   end
   
   class IfStatement < Compileable
     def initialize(condition, true_block, false_block)
-      @condition = condition #Computable is expected
+      @condition = condition #Statement is expected
       @true_block = true_block
-      @false_block = [] #TODO: insert block when ready
+      @false_block = false_block #TODO: insert block when ready
     end
     
     def compile()
-      # TODO:write compilation for if block
-      @bin = [0, 0]
+      c = get_codes
+      @bin = []
+      @condition.compile
       @true_block.compile
+      @false_block.compile
+      
+      @bin += @condition.bin
+      @bin << c[:JPRZ]
+      @bin << @true_block.bin.size + 3  # Jumping over true_block and jumper over false block
       @bin += @true_block.bin
+      @bin << c[:JPR]
+      @bin << @false_block.bin.size + 2 # Jumping over
+      @bin += @false_block.bin
+      @bin << c[:NOP]
+      @bin << c[:NOP]
       @is_compiled = true
+    end
+    
+    def set_else_block(block)
+      @false_block = block
     end
     
   end
   
-  class Computable < Compileable
+  class WhileStatement < Compileable
+    
+    def initialize(condition, block)
+      @condition = condition
+      @block = block
+    end
+    
+    def compile
+      c = get_codes
+      @bin = []
+      @condition.compile
+      @block.compile
+      
+      @bin += @condition.bin
+      @bin << c[:JPRZ]
+      @bin << @block.size + 3
+      @bin += @block.bin
+      @bin << c[:JPR]
+      @bin << -(2 + @block.bin.size + @condition.bin.size )
+    end
+  end
+  
+  class Statement < Compileable
     PRTY = {
-      :t_inc      => 9,
-      :t_dec      => 9,
       :t_not      => 8,
       :t_mul      => 7,
       :t_div      => 7,
@@ -297,14 +340,14 @@ module MT
       false
     end
     
-    def if_statement?
+    def if?
       @tokens.first == :t_if
     end
     
-    def to_if_statement
+    def to_if
+      abort("If statement: unexpected #{@tokens[ptr]} expected :t_obr") if @tokens[1] != :t_obr
       cond_stk = []
-      ptr = 1
-      abort("If statement: unexpected #{@tokens[ptr]}") if @tokens[ptr] != :t_obr
+      ptr = 2
       while @tokens[ptr] != :t_cbr && ptr < @tokens.size
         cond_stk << @tokens[ptr]
         ptr += 1
@@ -312,28 +355,41 @@ module MT
       abort("If statement: closing bracket is missing") if ptr == @tokens.size
       ptr += 1
       abort("If statement: true_block is missing") unless @tokens[ptr].kind_of? Array
-      cond = Computable.new( cond_stk, @scope )
+      cond = Statement.new( cond_stk, @scope )
       block = Block.new @tokens[ptr], @scope
       
-      return IfStatement.new(cond, block, [])
+      return IfStatement.new(cond, block, Block.new([], @scope))
+    end
+       
+    def else?
+      @tokens.first == :t_else
     end
     
-    ########## TO IMPLEMENT #################
-    
-    def else_statement?
-      abort('TO IMPLEMENT')
+    def to_else
+      abort("Else statement: expected :t_else and block; found: #{@tokens}") unless @tokens.size == 2
+      abort("Else statement: expected block, found: #{@tokens[1]}") unless @tokens[1].kind_of? Array
+      return Block.new(@tokens[1], @scope)
     end
     
-    def to_else_statement
-      abort('TO IMPLEMENT')
+    def while?
+      @tokens.first == :t_while
     end
     
-    def while_statement?
-      abort('TO IMPLEMENT')
-    end
-    
-    def to_while_statement
-      abort('TO IMPLEMENT')
+    def to_while
+      abort("While statement: unexpected #{@tokens[ptr]} expected :t_obr") if @tokens[1] != :t_obr
+      cond_stk = []
+      ptr = 2
+      while @tokens[ptr] != :t_cbr && ptr < @tokens.size
+        cond_stk << @tokens[ptr]
+        ptr += 1
+      end
+      abort("While statement: closing bracket is missing") if ptr == @tokens.size
+      ptr += 1
+      abort("While statement: true_block is missing") unless @tokens[ptr].kind_of? Array
+      cond = Statement.new( cond_stk, @scope )
+      block = Block.new @tokens[ptr], @scope
+      
+      return WhileStatement.new(cond, block)
     end
     
     #########################################
@@ -346,7 +402,7 @@ module MT
           @bin.push c[:PSH]
           @bin.push token
         elsif token.kind_of?( GetVar ) || token.kind_of?( AssignVar )
-          token.compile @scope.get_var_addr(token.var_name)
+          token.compile
           @bin += token.bin
           
         #Compliling operations
