@@ -40,10 +40,15 @@ T_RX = {
   :t_end    => /\}/,    
 
   :t_scol   => /;/,
-  :t_col    => /,/,     #unsupported
-
+  :t_coma    => /,/,     #unsupported
+  
+  :t_plus_assign  => /\+=/,
+  :t_minus_assign => /\-=/,
+  :t_mul_assign   => /\*=/,
+  :t_div_assign   => /\/=/,
+  :t_mod_assign   => /\%=/,
+   
   :t_plus   => /\+/,
-
   :t_minus  => /\-/,
 
   :t_mul    => /\*/,
@@ -68,6 +73,7 @@ KW_RX = {
   :t_if      => /^[iI][fF]$/,
   :t_else    => /^[eE][lL][sS][eE]$/,
   :t_while   => /^[wW][hH][iI][lL][eE]$/,
+  :t_return  => /^[rR][eE][tT][uU][rR][nN]$/
 }
 
 PRTY = {
@@ -87,7 +93,7 @@ PRTY = {
   :t_eq       => 4,
   :t_and      => 3,
   :t_or       => 2,
-  :t_col      => 0,
+  :t_coma     => 0,
   :t_assign   => 0,
   :t_obr      => -1,
   :t_cbr      => -1,
@@ -136,8 +142,31 @@ def tokenize(str)
               var_name = tokens.last
               tokens.push :t_scol
               tokens.push var_name
+            # dirth to enable += -= *= /= %=
+            elsif (tokens.size >= 1 &&
+                   [:t_plus_assign, 
+                    :t_minus_assign,
+                    :t_mul_assign,
+                    :t_div_assign,
+                    :t_mod_assign].include?( k ))
+              var_name = tokens.last
+              tokens.push :t_assign
+              tokens.push var_name
+              tokens.push case k
+                when :t_plus_assign
+                  :t_plus
+                when :t_minus_assign
+                  :t_minus
+                when :t_mul_assign
+                  :t_mul
+                when :t_div_assign
+                  :t_div
+                when :t_tmod_assign
+                  :t_mod
+              end
+              
             end
-            tokens.push k
+            tokens.push k unless [:t_plus_assign, :t_minus_assign, :t_mul_assign, :t_div_assign, :t_mod_assign].include? k
             break
         end
       end
@@ -197,35 +226,72 @@ def group(tokens)
   groups
 end
 
-test_str = "
-  //fibbonachi
-  var prev = 1;
-  var cur = 1;
+fib = "
+  //fibbonachi exposes if and while loops
+  var prev = 0;
+  var cur = 0;
   var counter = 0;
-  while (counter < 10)
+  while(counter < 10)
   {
-    var tmp = cur;
-    cur = cur + prev;
-    prev = tmp;
-    counter = counter + 1;
+    if(prev == 0 && cur == 0){
+      var def_prev_val = 1;
+      var def_cur_val = 1;
+      prev = def_prev_val;
+      cur = def_cur_val;
+    }else{
+      var tmp = cur;
+      cur = cur + prev;
+      prev = tmp;
+      counter = counter + 1;
+    }
   }
 "
 
+funcdef = "
+  var result = 1;
+  var n = 5;
+  while ( n != 1{
+    result *= n;
+    n = n - 1;
+  }
+"
+
+test_str = funcdef
+
+def pretty(arr, ind=0)
+  (ind).times{ print ' ' }
+  puts '['
+  arr.each do |e|
+    if e.kind_of? Array
+      pretty(e, ind+4)
+    else
+      (ind+4).times{ print ' ' }
+      puts e.to_s
+    end  
+  end
+  (ind).times{ print ' ' }
+  puts ']'
+end
 
 puts test_str
 
+puts "~~~~~~~~~~\nTokenized as\n~~~~~~~~~~~"
 tokens = tokenize test_str
+puts tokens.to_s
+
+puts "~~~~~~~~~~\nGrouped as\n~~~~~~~~~~~"
 statements = group(tokens)
+pretty(statements)
  
-puts statements.to_s
- 
-b = MT::Block.new statements, nil
+puts "~~~~~~~~~~\nCompilation\n~~~~~~~~~~~"
+b = MT::Block.new statements, nil, true
 b.compile
 
+puts "~~~~~~~~~~\nVM ASM:\n~~~~~~~~~~~"
 vm = MT::TinyVM.new
 vm.to_asm(b.bin)
 puts '~~~~~~~~~~~~~'
-vm.dbg b.bin, (0..3).to_a
+vm.play b.bin, (0..3).to_a
 
 
 

@@ -18,6 +18,7 @@ module MT
     
       @byte_code = []
       @ptr = 0  #current programm byte
+      @ret = 0  #function return value
       @stack = []
     
       @MEM = [] #Memory
@@ -52,6 +53,12 @@ module MT
       
       @ops[:JPR]   = lambda { jpr }
       @ops[:JPRZ]  = lambda { jprz }
+      @ops[:JMP]   = lambda { jmp }
+      
+      @ops[:CALL]  = lambda { call }
+      @ops[:RET]   = lambda { ret }
+      @ops[:RETV]  = lambda { retv }
+      
       
       @opcodes = {
         0x00  =>  :NOP,
@@ -87,6 +94,13 @@ module MT
         
         0x30  => :JPR,   # 2 jump relative to offset
         0x31  => :JPRZ,  # 2 jump relative if zero to offset
+        0x32  => :JMP,
+        
+        
+        0x40  => :RET,
+        0x41  => :RETV,
+        0x42  => :CALL,
+        0x43  => :PSHR, # push result to stack
         
         0xF0  => :PRT,  # 2 print nb
         0xF1  => :PRTT, # 1 print top
@@ -104,9 +118,12 @@ module MT
       @ptr += 1
     end
     
-    def play(code)
+    def play(code, mem_slots = [])
       @byte_code = code
       step while !@STOP
+      mem_slots.each do |slot|
+        puts "MEM[#{slot}] = #{@MEM[slot]}"
+      end
     end
     
     def dbg(code, mem_slots = [])
@@ -139,15 +156,16 @@ module MT
     
     def get_op_size(op)
       case op
-        when :PSH, :POPV, :PSHV, :JPRZ, :JPR
+        when :PSH, :POPV, :PSHV, :JPRZ, :JPR, :CALL, :JMP
           2
         else 1
       end
     end
     
     def has_addr?(op)
-      [:POPV, :PSHV].include? op
+      [:POPV, :PSHV, :CALL, :JMP].include? op
     end
+    
     
     def to_asm(code)
       ptr = 0
@@ -276,6 +294,25 @@ module MT
       else
         next_val
       end
+    end
+    
+    def jmp()
+      @ptr = next_val - 1 
+    end
+    
+    def ret()
+      @val = 0
+      @ptr = pop
+    end
+    
+    def retv()
+      @val = pop
+      ret()
+    end
+    
+    def call()
+      push @ptr
+      @ptr = next_val
     end
     
     #Printing a character

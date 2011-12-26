@@ -1,7 +1,7 @@
 require File.join(File.dirname(__FILE__) + '/MT', 'tiny_vm')
 
 module MT
-
+  
   class Scope
     
     @@instances = []
@@ -20,12 +20,13 @@ module MT
     
     def initialize(parent_scope)
       @vars = {}
+      @funcs = {}
       @last_var_addr = 0
       @parent = parent_scope
       @@instances.push self
       @id = @@last_id
       @@last_id += 1
-      puts 'Initialized new scope ' + @id.to_s
+      puts 'Initialized new scope ' + @id.to_s + ' with parent ' + @parent.to_s
     end
     
     def contains_var?(var_name)
@@ -83,8 +84,18 @@ module MT
   
   end
   
+  class LazyCall
+    def initialize(func_name)
+      @func_name = func_name
+    end
+    
+    def real_addr
+    
+    end
+  end
+  
   class Compileable
-    attr_reader :bin
+    attr_reader :bin, :scope
   
     def initialize(scope)
       @is_compiled = false
@@ -92,7 +103,7 @@ module MT
       @scope = scope
     end
     def compile()
-      abort( "Not implemented" )
+      abort( "Compilation not implemented" )
     end
     def compiled?
       @is_compiled
@@ -109,18 +120,23 @@ module MT
   
   class Block < Compileable
     
-    def initialize(synths, parent_scope)
+    @@compiled_everything = false
+    
+    def initialize(synths, parent_scope, is_global = false)
       scope = Scope.new parent_scope
       super(scope)
       puts "Block binded to Scope \##{@scope.id}"
       @synths = synths
       @to_compile = []
+      @is_global = is_global
     end
     
     def compile()
       @synths.each do |st|
          ctbl = MT::Statement.new st, @scope
-         if ctbl.init_var?
+         if ctbl.rotten?
+           abort("Rotten statement : #{st}")
+         elsif ctbl.init_var?
            @to_compile.push ctbl.to_init_var
          elsif ctbl.if?
            @to_compile.push ctbl.to_if
@@ -129,6 +145,8 @@ module MT
            @to_compile.last.set_else_block ctbl.to_else
          elsif ctbl.while?
             @to_compile.push ctbl.to_while
+         elsif ctbl.func?
+            ctbl.to_func  # Dont push it not to cause damage
          else
            @to_compile.push ctbl
          end
@@ -139,7 +157,8 @@ module MT
         @bin += c.bin
       end
       @bin = [0] if @bin.empty?
-      unless @scope.parent
+      if @is_global
+        @bin = Func.encode + @bin
         puts "COMPUTING SCOPE OFFSETS"
         Scope.compute_offsets
         for i in 0...(@bin.size)
@@ -148,6 +167,7 @@ module MT
           end
         end
         @bin << 0xFF # STOP
+        @@compiled_everything = true
       end
       @is_compiled = true
       @bin
@@ -198,6 +218,7 @@ module MT
   
   class IfStatement < Compileable
     def initialize(condition, true_block, false_block)
+      super(true_block.scope)
       @condition = condition #Statement is expected
       @true_block = true_block
       @false_block = false_block #TODO: insert block when ready
@@ -205,7 +226,6 @@ module MT
     
     def compile()
       c = get_codes
-      @bin = []
       @condition.compile
       @true_block.compile
       @false_block.compile
@@ -229,15 +249,14 @@ module MT
   end
   
   class WhileStatement < Compileable
-    
     def initialize(condition, block)
+      super(block.scope)
       @condition = condition
       @block = block
     end
     
     def compile
       c = get_codes
-      @bin = []
       @condition.compile
       @block.compile
       
@@ -249,6 +268,87 @@ module MT
       @bin << -(2 + @block.bin.size + @condition.bin.size )
     end
   end
+  
+  class Func < Compileable
+    
+    ## Static part
+    
+    
+    @@last_id = 0
+    @@funcs = {}    #name -> function
+    @@bin = {}    #name -> bin
+    
+    
+    def self.reg(name, bin)
+      @@funcs[name] = bin
+    end
+    
+    def self.encode
+      bin = [ 0x32, 0]  #jump somewhere
+      
+      @@funcs.values.each do |f|
+        puts "FUNCS::: #{f}\n"
+        f.compile unless f.compiled?
+        bin += f.bin
+      end
+      bin[1] = bin.size
+      bin
+    end
+    
+    ## Static part ends
+    attr_reader :name, :params, :block, :id  
+    def initialize(name, params, block)
+      super(block.scope)
+      @name = name
+      @params = params
+      @block = block
+      
+      @@funcs[@name] = self
+      @id = @@last_id
+      @@last_id += 1
+    end
+    
+    def pre_compile
+      code = []
+      @params.each do |p|
+        InitVar.new(p, @block.scope).compile
+        as = AssignVar.new(p, @block.scope)
+        as.compile
+        code += as.bin
+      end
+      code
+    end
+    
+    def post_compile
+      [0x40]  #RET
+    end
+    
+    def set_offset(val)
+      @offset = val
+    end
+    
+    def offset
+      @offset
+    end
+    
+    def compile
+      @bin += pre_compile
+      @block.compile
+      @bin += @block.bin
+      @bin += post_compile
+      @is_compiled = true
+      @bin
+    end
+    
+  end
+  
+  
+  class FuncCall < Func
+  end
+  
+  class Return < IfStatement
+  end
+  
   
   class Statement < Compileable
     PRTY = {
@@ -267,6 +367,7 @@ module MT
       :t_and      => 3,
       :t_or       => 2,
       :t_col      => 0,
+      :t_return   => -1,
       :t_obr      => -1,
       :t_cbr      => -1,
     }
@@ -328,7 +429,7 @@ module MT
     end
   
     def to_init_var
-      abort( "Unexpected token #{@tokens[2]} after assigning a variable" ) unless @tokens.size == 2
+      abort( "Unexpected token #{@tokens[2]} after declaration of variable" ) unless @tokens.size == 2
       InitVar.new( @tokens[1], @scope )
     end
     
@@ -392,6 +493,63 @@ module MT
       return WhileStatement.new(cond, block)
     end
     
+    def func?
+      @tokens.size >= 3 && 
+      @tokens[0] == :t_void || @tokens[0] == :t_typedef &&
+      @tokens[1].kind_of?(String) &&
+      @tokens[2] == :t_obr
+    end
+    
+    def to_func
+      type = @tokens[0]
+      name = @tokens[1]
+      params = []
+      block = @tokens.last
+      unless @tokens.last.kind_of? Array
+        abort ("Expected to find block in end of function, found #{@tokens.last}") 
+      end        
+      ptr = 3
+      while true
+        if @tokens[ptr] == :t_typedef
+          ptr += 1
+          if @tokens[ptr].kind_of? String
+            params.push @tokens[ptr]
+            ptr += 1
+            if @tokens[ptr] == :t_coma
+              ptr += 1
+            elsif @tokens[ptr] == :t_cbr
+              break
+            else
+              abort('Unexpected end of function definition') unless @tokens[ptr]
+              abort("Func definition : :t_coma or :t_cbr expected, #{@tokens[ptr]} found")
+            end  
+          else
+            abort('Unexpected end of function definition') unless @tokens[ptr]
+            abort("Func definition : param name expected, #{@tokens[ptr]} found")
+          end
+        elsif @tokens[ptr] == :t_cbr
+          break
+        else
+          abort('Unexpected end of function definition') unless @tokens[ptr]
+          abort("Func definition : :t_typedef expected, #{@tokens[ptr]} found")
+        end
+      end
+      if type == :t_void
+        return Func.new(name, params, Block.new(@tokens.last, nil) )
+      else
+        
+      end
+    end
+    
+    
+    def rotten? #rotten means that statement pushes value to stack and there's no one to pop it
+      !(if? || else? || while? || func?) &&
+      !@tokens.include?(:t_assign) &&
+      !@tokens.include?(:t_return) &&
+      !@tokens.include?(:t_typedef)
+    end
+    
+    
     #########################################
   
     def compile()
@@ -434,7 +592,8 @@ module MT
           @bin << c[:GT]
         elsif token == :t_ge
           @bin << c[:GE]
-          
+        elsif token == :t_return
+          @bin << c[:RETV]
         else
           abort ("Unexpected token #{token}")
         end
