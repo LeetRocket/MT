@@ -140,90 +140,81 @@ end
 def group(tokens)
   groups = []
   g = []
-  tokens.each do |tkn|
-    if tkn != :t_scol
+  ptr = 0
+  nesting = 0
+  block_extracting = false
+  block_start_index = 0
+  block_end_index = 0
+  while ptr < tokens.size
+    tkn = tokens[ptr]
+    #extracting block
+    if tkn == :t_begin
       g.push tkn
-    else
-      groups.push g
-      g = []
+      unless block_extracting
+        block_extracting = true
+        block_start_index = g.size  
+      else
+        nesting += 1
+      end
+    elsif tkn == :t_end
+      g.push tkn
+      if nesting == 0
+        abort('{ is missing') if !block_extracting
+        block_extracting == false
+        block_end_index = g.size - 1
+        block = group g.slice(block_start_index, block_end_index - block_start_index)
+        g = g.slice(0, block_start_index - 1) + [block]
+        groups.push g
+        g = []
+        block_extracting = false
+      else
+        nesting -= 1
+      end     
+    elsif tkn != :t_scol
+      g.push tkn
+    elsif tkn == :t_scol
+      if block_extracting
+        g.push tkn
+      else
+        groups.push g
+        g = []
+      end
     end
+    ptr += 1
   end
-    abort("Semicolumn is missing") unless g.empty?
+    unless g.empty?
+      abort("; or } is missing") 
+    end
   groups
 end
 
-def postfix(statement)
-  out = []
-  stk = []
-  prev = nil
-  statement.each do |token|
-    
-    if token.kind_of? Numeric or token.kind_of? String
-      out.push token
-    
-    elsif token == :t_obr || stk.empty?
-      stk.push token
-    
-    elsif token == :t_cbr
-      while !stk.empty? && stk.last != :t_obr
-        out.push stk.pop
-      end
-      abort("Missing opening bracket") if stk.empty?
-      stk.pop
-    
-    elsif PRTY[token]
-      while !stk.empty? && PRTY[stk.last] >= PRTY[token]
-        out.push stk.pop
-      end
-      stk.push token
-    
-    else
-      abort("Unknown symbol: #{token}")
-    
-    end
-    puts "tkn: #{token}"
-    puts "out: #{out.to_s}"
-    puts "stk: #{stk.to_s}"
-    puts "~~~~~~~~~~~"
-    
-  end
-  
-  out.push stk.pop while !stk.empty?
-  out
-end
-
 test_str = "
-    var t1;
-    t1 = 1 < 2 && 3 <= 3;
+    if( 1 < 2)
+    {
+      var j;
+      if( 1 < 2)
+      {
+        var j;
+      }
+      if( 2 < 3)
+      {
+        var j;
+      }   
+    }
 "
 
 tokens = tokenize test_str
 statements = group(tokens)
+ 
+puts statements.to_s
+ 
+b = MT::Block.new statements, nil
+b.compile
 
-output = []
+vm = MT::TinyVM.new
+vm.to_asm(b.bin)
 
-statements.each do |st|
-  ctbl = MT::Computable.new st
-  if ctbl.init_var?
-    output.push ctbl.to_init_var
-  else
-    output.push ctbl
-  end
-end
 
-code = []
-output.each do |o|
-  o.compile
-  code += o.bin
-end 
-
- code += [0xFF]  #STOP
- puts code.to_s
- puts '~~~~~~~~'
- vm = MT::TinyVM.new
- vm.to_asm code
- puts '~~~~~~~~'
- vm.dbg(code, [0,1, 2])
 
 
 
